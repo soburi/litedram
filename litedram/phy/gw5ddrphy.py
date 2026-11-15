@@ -46,7 +46,7 @@ class GW5DDRPHYInit(Module):
         stop     = Signal()
         freeze   = Signal()
         pause    = Signal()
-        reset    = Signal()
+        reset    = self.reset
 
         # DDRDLLA instance -------------------------------------------------------------------------
         _lock = Signal()
@@ -89,7 +89,6 @@ class GW5DDRPHYInit(Module):
             self.pause.eq(pause),
             self.stop.eq(stop),
             self.delay.eq(delay),
-            self.reset.eq(reset),
         ]
 
 # Gowin GW5A DDR PHY -------------------------------------------------------------------------------

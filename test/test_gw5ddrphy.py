@@ -8,11 +8,37 @@ import unittest
 from migen import *
 from migen.sim import run_simulation
 
-from litedram.phy.gw5ddrphy import GW5DDRPHY
+from litedram.phy.gw5ddrphy import GW5DDRPHY, GW5DDRPHYInit
 from test import test_ddr3_phy_settings
 
 
 class TestGW5DDRPHY(unittest.TestCase):
+    def test_init_reset_changes_only_with_stopped_clock(self):
+        init = GW5DDRPHYInit()
+        fragment = init.get_fragment()
+        dll = next(s for s in fragment.specials if isinstance(s, Instance) and s.of == "DDRDLL")
+        lock = next(p.expr for p in dll.items if isinstance(p, Instance.Output) and p.name == "LOCK")
+        fragment.specials.remove(dll)
+        samples = []
+
+        def generator():
+            for cycle in range(220):
+                # Exercise startup and a subsequent DLL re-lock sequence.
+                yield lock.eq(5 <= cycle < 100 or cycle >= 110)
+                samples.append(((yield init.stop), (yield init.reset)))
+                yield
+
+        run_simulation(fragment, {"init": generator()}, clocks={"init": 20})
+        rises = [i for i in range(1, len(samples)) if samples[i][1] and not samples[i-1][1]]
+        self.assertEqual(len(rises), 2)
+        for start in rises:
+            end = next(i for i in range(start + 1, len(samples)) if not samples[i][1])
+            self.assertEqual(end - start, 8)
+            # Gate the fast clock before assertion and leave it gated after
+            # deassertion. Both transitions have an entire eight-cycle guard.
+            self.assertTrue(all(stop for stop, _ in samples[start-8:end+8]))
+        self.assertTrue(all(not reset or stop for stop, reset in samples))
+
     def test_quarter_rate_data_order(self):
         phy = GW5DDRPHY(test_ddr3_phy_settings.TestDDR3PHYSettings.get_pads(),
             nphases      = 4,
